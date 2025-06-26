@@ -1,0 +1,14 @@
+python==3.11
+langchain
+langchain-community
+langchain-core
+langchain-openai
+faiss-cpu
+pypdf
+sentence-transformers
+beautifulsoup4
+tiktoken
+unstructured
+langgraph
+ollama
+streamlit

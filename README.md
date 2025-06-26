@@ -19,8 +19,9 @@ A simple RAG (Retrieval-Augmented Generation) chatbot for answering questions ba
 ## Installation
 1. Clone this repository:
    ```bash
-   git clone <your-repo-url>
+   mkdir DocumentQABot
    cd DocumentQABot
+   git clone https://github.com/nope0000/PDF_QA_Chatbot.git
    ```
 2. Install Python dependencies:
    ```bash
@@ -28,8 +29,8 @@ A simple RAG (Retrieval-Augmented Generation) chatbot for answering questions ba
    ```
 3. Install and run Ollama, then pull the required model:
    ```bash
-   ollama pull llama3
    ollama serve
+   ollama pull llama3
    ```
 
 ## Usage
@@ -40,7 +41,7 @@ python model.py
 ```
 You will be prompted to enter the path to your PDF document, then you can ask questions interactively.
 
-### Streamlit Web App
+### Streamlit
 ```bash
 streamlit run app.py
 ```
