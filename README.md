@@ -10,7 +10,7 @@ A simple RAG (Retrieval-Augmented Generation) chatbot for answering questions ba
 - Modular graph workflow for retrieval, grading, and answer generation.
 
 ## Requirements
-- Python 3.8+
+- Python 3.11
 - [Ollama](https://ollama.com/) (with the `llama3` model pulled)
 - Streamlit
 - langchain, langchain_community, langgraph, langchain_core

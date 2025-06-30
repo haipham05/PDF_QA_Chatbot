@@ -1,5 +1,4 @@
-from langchain_community.chat_models import ChatOllama
-from langchain_community.embeddings import OllamaEmbeddings
+from langchain_ollama import OllamaEmbeddings, ChatOllama
 from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -7,15 +6,26 @@ from langgraph.graph import StateGraph, END
 from typing import TypedDict, List
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+import os
+import tkinter as tk
+from tkinter import filedialog
 
 llm = ChatOllama(model="llama3", temperature=0)
 embeddings = OllamaEmbeddings(model="llama3")
 
-file_path = input("Input your document path here: ")
+root = tk.Tk()
+root.withdraw()
+file_path = filedialog.askopenfilename(
+    title="Select a PDF file",
+    filetypes=[("PDF files", "*.pdf")]
+)
+if not file_path:
+    print("No file selected. Exiting.")
+    exit()
+
 try:
     loader = PyPDFLoader(file_path)
     docs = loader.load()
-    print(f"Successfully loaded {len(docs)} pages from {file_path}")
 except Exception as e:
     print(f"Error loading document: {e}")
     print("Please ensure the file path is correct and the file is a valid PDF.")
@@ -27,11 +37,9 @@ text_splitter = RecursiveCharacterTextSplitter(
     add_start_index=True
 )
 chunks = text_splitter.split_documents(docs)
-print(f"Document split into {len(chunks)} chunks.")
 
 vectorstore = FAISS.from_documents(chunks, embeddings)
 retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
-print("Vector store created and retriever initialized.")
 
 class GraphState(TypedDict):
     """
@@ -53,22 +61,18 @@ def retrieve(state: GraphState):
     """
     Retrieve documents from vectorstore
     """
-    print("\n---NODE: RETRIEVE DOCUMENTS---")
     question = state["question"]
     documents = retriever.invoke(question)
-    print(f"Retrieved {len(documents)} documents.")
     return {"documents": documents, "question": question}
 
 def grade_documents(state: GraphState):
     """
     Grades the relevance of the retrieved documents to the question.
     """
-    print("\n---NODE: GRADE DOCUMENTS---")
     question = state["question"]
     documents = state["documents"]
 
     if not documents:
-        print("No documents retrieved for grading. Marking as 'not_relevant'.")
         return {"document_grade": "not_relevant", "question": question, "documents": documents}
 
     grade_prompt = ChatPromptTemplate.from_messages([
@@ -86,11 +90,9 @@ def grade_documents(state: GraphState):
     try:
         grade = grading_chain.invoke({"question": question, "context": context_for_grading}).strip().lower()
     except Exception as e:
-        print(f"Error during document grading: {e}. Defaulting to 'not_relevant'.")
         grade = "no"
 
     document_grade = "relevant" if grade == "yes" else "not_relevant"
-    print(f"Documents graded as: {document_grade}")
     return {"document_grade": document_grade, "question": question, "documents": documents}
 
 
@@ -98,12 +100,10 @@ def generate(state: GraphState):
     """
     Generate answer using LLM and retrieved documents
     """
-    print("\n---NODE: GENERATE ANSWER---")
     question = state["question"]
     documents = state["documents"]
 
     if not documents:
-        print("No documents available for generation.")
         return {"generation": "I'm sorry, I don't have enough information from the documents to answer your question.", "question": question, "documents": documents}
 
     prompt = ChatPromptTemplate.from_messages([
@@ -119,7 +119,6 @@ def generate(state: GraphState):
     rag_chain = prompt | llm | StrOutputParser()
     
     generation = rag_chain.invoke({"context": documents, "question": question})
-    print("Answer generated.")
     return {"documents": documents, "question": question, "generation": generation}
 
 
@@ -128,14 +127,11 @@ def route_decision(state: GraphState):
     This function acts as the conditional router.
     It takes the current state and decides the next step based on 'document_grade'.
     """
-    print("\n---NODE: ROUTE DECISION---")
     document_grade = state["document_grade"]
 
     if document_grade == "relevant":
-        print("Routing to 'generate' (documents are relevant).")
         return "generate"
     else:
-        print("Routing to 'end' (documents not relevant or insufficient).")
         return "end_with_no_answer"
 
 
@@ -174,18 +170,15 @@ while True:
     try:
         final_state = None
         for s in app.stream(inputs):
-            print(f"Current state: {s}")
-            print("---")
             final_state = s
 
         if final_state:
             if "generate" in final_state and "generation" in final_state["generate"]:
                 print(f"Chatbot: {final_state['generate']['generation']}")
             elif "retrieve" in final_state:
-                print("Chatbot: Sorry, I couldn't find enough relevant information in your document to answer that question.")
+                print("Chatbot: Sorry, I couldn't find enough relevant information in your document to answer the question.")
             else:
                 print("Chatbot: Sorry, an unexpected issue occurred. Please try again.")
 
     except Exception as e:
-        print(f"Error during chatbot interaction: {e}")
         print("Chatbot: Sorry, I can't respond to your query now.")
