@@ -63,7 +63,9 @@ def retrieve(state: GraphState):
     """
     question = state["question"]
     documents = retriever.invoke(question)
-    return {"documents": documents, "question": question}
+    # Extract page_content from Document objects to match GraphState type
+    document_contents = [doc.page_content for doc in documents]
+    return {"documents": document_contents, "question": question}
 
 def grade_documents(state: GraphState):
     """
@@ -85,7 +87,7 @@ def grade_documents(state: GraphState):
 
     grading_chain = grade_prompt | llm | StrOutputParser()
 
-    context_for_grading = "\n---\n".join([doc.page_content for doc in documents])
+    context_for_grading = "\n---\n".join(documents)
 
     try:
         grade = grading_chain.invoke({"question": question, "context": context_for_grading}).strip().lower()
@@ -149,8 +151,8 @@ workflow.add_conditional_edges(
     "grade_documents",
     route_decision,
     {
-        "generate": "generate",          # If route_decision returns "generate"
-        "end_with_no_answer": END        # If route_decision returns "end_with_no_answer"
+        "generate": "generate",
+        "end_with_no_answer": END
     }
 )
 
@@ -166,7 +168,7 @@ while True:
     if user_question.lower() == 'exit':
         break
 
-    inputs = {"question": user_question}
+    inputs: GraphState = {"question": user_question, "generation": "", "documents": [], "document_grade": ""}
     try:
         final_state = None
         for s in app.stream(inputs):
