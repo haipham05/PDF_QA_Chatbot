@@ -1,8 +1,18 @@
-# python==3.11
-langchain_ollama
+# Core dependencies for Document and Video QA Chatbot
+streamlit
+langchain
 langchain_community
-langchain_text_splitters
 langgraph
+langchain_core
+langchain_ollama
 faiss-cpu
-pypdf2
-tkinter
+# For PDF loading
+pypdf
+# For YouTube transcript extraction
+youtube-transcript-api
+# For ONNX-based reranking (Flashrank)
+onnxruntime
+# Optional: For better PDF parsing (if needed)
+# pymupdf
+# For web UI and file handling
+# (tempfile and os are standard library)

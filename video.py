@@ -1,14 +1,18 @@
 from langchain_ollama import OllamaEmbeddings, ChatOllama
 from langchain_community.vectorstores import FAISS
-from langchain_community.document_loaders import YoutubeLoader
+from youtube_transcript_api import YouTubeTranscriptApi
+from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.graph import StateGraph, END
 from typing import TypedDict, List
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 import os
+from langchain.retrievers import ContextualCompressionRetriever
+from langchain_community.document_compressors import FlashrankRerank
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import simpledialog, filedialog
+from langchain_community.document_loaders import YoutubeLoader
 
 llm = ChatOllama(model="llama3", temperature=0)
 embeddings = OllamaEmbeddings(model="llama3")
@@ -66,7 +70,6 @@ def load_youtube_video(youtube_url):
     # Method 2: Try with transcript list approach
     try:
         print("Trying alternative transcript method...")
-        from youtube_transcript_api._api import YouTubeTranscriptApi
         import re
         
         # Extract video ID from URL
@@ -86,7 +89,6 @@ def load_youtube_video(youtube_url):
                     transcript_data = transcript.fetch()
                     text = " ".join([item.text for item in transcript_data])
                     
-                    from langchain_core.documents import Document
                     doc = Document(
                         page_content=text,
                         metadata={
@@ -109,7 +111,6 @@ def load_youtube_video(youtube_url):
                 transcript_data = transcript.fetch()
                 text = " ".join([item.text for item in transcript_data])
                 
-                from langchain_core.documents import Document
                 doc = Document(
                     page_content=text,
                     metadata={
@@ -137,8 +138,46 @@ def load_youtube_video(youtube_url):
     return None
 
 # Get YouTube URL and load video
-youtube_url = get_youtube_url()
-docs = load_youtube_video(youtube_url)
+video_url = get_youtube_url()
+docs = None
+if video_url:
+    try:
+        # Validate URL format
+        if not ("youtube.com/watch?v=" in video_url or "youtu.be/" in video_url):
+            print("Invalid YouTube URL format. Please provide a valid YouTube URL.")
+            exit()
+        # Extract video ID
+        if "youtube.com/watch?v=" in video_url:
+            video_id = video_url.split("v=")[-1].split("&")[0]
+        else:
+            video_id = video_url.split("youtu.be/")[-1].split("?")[0]
+        # Fetch transcript using youtube_transcript_api
+        try:
+            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            # Prefer English transcript
+            transcript = None
+            for t in transcript_list:
+                if t.language_code.startswith('en'):
+                    transcript = t.fetch()
+                    break
+            if transcript is None:
+                # Fallback to first available
+                transcript = transcript_list.find_transcript([t.language_code for t in transcript_list]).fetch()
+            def get_text(item):
+                if isinstance(item, dict):
+                    return item.get('text', '')
+                return getattr(item, 'text', '')
+            text = " ".join([get_text(item) for item in transcript])
+            docs = [Document(page_content=text, metadata={"source": video_url, "title": f"YouTube Video {video_id}", "language": transcript_list._manually_created_transcripts[0].language_code if transcript_list._manually_created_transcripts else 'unknown'})]
+        except Exception as e:
+            print(f"No transcript found for this video. It may be private, region-locked, or have no captions. Error: {e}")
+            exit()
+        if not docs or not docs[0].page_content.strip():
+            print("No transcript found for this video. It may be private, region-locked, or have no captions.")
+            exit()
+    except Exception as e:
+        print(f"Error loading video transcript: {e}")
+        exit()
 
 def generate_video_summary(docs):
     """
@@ -190,6 +229,9 @@ print("=" * 60)
 
 vectorstore = FAISS.from_documents(docs, embeddings)
 retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+# Add Flashrank reranker
+compressor = FlashrankRerank()
+rerank_retriever = ContextualCompressionRetriever(base_compressor=compressor, base_retriever=retriever)
 
 class GraphState(TypedDict):
     """
@@ -208,10 +250,10 @@ class GraphState(TypedDict):
 
 def retrieve(state: GraphState):
     """
-    Retrieve documents from the vectorstore
+    Retrieve documents from the vectorstore with reranking
     """
     question = state["question"]
-    documents = retriever.invoke(question)
+    documents = rerank_retriever.invoke(question)
     # Extract page_content from Document objects to match GraphState type
     document_contents = [doc.page_content for doc in documents]
     return {"documents": document_contents, "question": question}

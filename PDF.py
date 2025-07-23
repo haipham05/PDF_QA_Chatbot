@@ -7,8 +7,8 @@ from typing import TypedDict, List
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 import os
-import tkinter as tk
-from tkinter import filedialog
+from langchain.retrievers import ContextualCompressionRetriever
+from langchain_community.document_compressors import FlashrankRerank
 
 llm = ChatOllama(model="llama3", temperature=0)
 embeddings = OllamaEmbeddings(model="llama3")
@@ -40,6 +40,9 @@ chunks = text_splitter.split_documents(docs)
 
 vectorstore = FAISS.from_documents(chunks, embeddings)
 retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
+# Add Flashrank reranker
+compressor = FlashrankRerank()
+rerank_retriever = ContextualCompressionRetriever(base_compressor=compressor, base_retriever=retriever)
 
 class GraphState(TypedDict):
     """
@@ -59,10 +62,10 @@ class GraphState(TypedDict):
 
 def retrieve(state: GraphState):
     """
-    Retrieve documents from vectorstore
+    Retrieve documents from vectorstore with reranking
     """
     question = state["question"]
-    documents = retriever.invoke(question)
+    documents = rerank_retriever.invoke(question)
     # Extract page_content from Document objects to match GraphState type
     document_contents = [doc.page_content for doc in documents]
     return {"documents": document_contents, "question": question}
