@@ -9,6 +9,8 @@ from langchain_core.output_parsers import StrOutputParser
 import os
 from langchain.retrievers import ContextualCompressionRetriever
 from langchain_community.document_compressors import FlashrankRerank
+import tkinter as tk
+from tkinter import simpledialog, filedialog
 
 llm = ChatOllama(model="llama3", temperature=0)
 embeddings = OllamaEmbeddings(model="llama3")
